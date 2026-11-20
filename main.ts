@@ -1,19 +1,13 @@
-// A working gta6-trophy-guide-01 entry (Node 22, standard library only): the guide is this directory's app/ folder,
-// This entry is THE PLATINUM RUN: a guide and tracker for all 55 trophies whose every guide cites its sources by
-// number, with live Exophase rarity on every trophy, per-trophy counters, a staged roadmap to the platinum and a
-// missables board — the app lives in app/ beside this file and its data in app/data/trophies.json.
-// plain static files a browser opens at app/index.html (ES modules, CSS, no build step), offline: it loads nothing
-// over the network, and its trophy list and guides are app/data/trophies.json. The program hands it in: it copies app/
-// and screenshots/ from beside this file to /output and writes /output/dossier.json, the summary the judge reads (your
-// screenshots, the first load's files and bytes, and your source), with the vendored make.fun library. Leave
-// vendor/makefun-frontend.ts as it is: the scorer requires dossier.json to be byte for byte what its own copy writes.
+// THE PLATINUM RUN — GTA VI Trophy Guide & Tracker (a gta6-trophy-guide-01 entry, Node 22, standard library only).
+// The guide itself is this directory's app/ folder: plain static files a browser opens at app/index.html (ES modules,
+// CSS, no build step), fully offline — it loads nothing over the network, and its trophy list, cited step-by-step
+// guides, live rarity figures and source list are app/data/trophies.json. This program hands the entry in: it copies
+// app/ and screenshots/ from beside this file to /output and writes /output/dossier.json, the summary the judge
+// reads (the screenshots, the first load's files and bytes, and the source), with the vendored make.fun library.
+// Leave vendor/makefun-frontend.ts as it is: the scorer requires dossier.json to be byte for byte what its own
+// copy writes.
 //
-// Only the plumbing, not a winner: a plain checklist of the 55 trophies with a one-line hint each. Write a real guide
-// for every trophy in your own words, a roadmap to the platinum, filters and a spoiler setting in app/, put 3 or 4 PNG
-// or JPEG screenshots of it in screenshots/ (the first by name is the cover; shots.json says which views this
-// starter's were taken of), and run it.
-//
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
+// Serve it locally with `node serve.ts`, then open the local address it prints.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 

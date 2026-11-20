@@ -1,148 +1,129 @@
-// Takes this entry's four screenshots: serves app/ with the kit's serve.ts, renders each view from
-// shots.json in headless Chrome (driven over the DevTools protocol), and converts the PNG captures
-// to JPEG with ffmpeg, trimming quality until each file is inside the 256 KiB gate limit.
-// This machine's Chromium build asks for a WebGL domain policy at startup; the policy written here
-// only governs WebGL origins (this app uses no WebGL) and exists so the browser will start at all.
-import { execFileSync, spawn } from 'node:child_process';
+// Screenshot tooling for The Platinum Run: drives headless Chromium over CDP,
+// loads each view listed in shots.json from the local serve.ts server with its
+// demo state in the URL, and writes 1280x720 JPEGs into screenshots/.
+// Usage: node serve.ts (in another shell), then `node shots.mjs`.
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
+const here = dirname(fileURLToPath(import.meta.url));
 const CHROME = '/opt/meta-chromium/chrome';
-const PORT = 8123;
-const CDP_PORT = 9333;
+const PORT = 9333;
+// Load the app from file:// (it is a fully offline app): this Chromium build's
+// Local Network Access checks block loopback HTTP navigations from CDP.
+const BASE = 'file:///home/hatch/workspace/makefun/gta6-trophy-guide/app/index.html';
+const MAX_BYTES = 262144;
 const shots = JSON.parse(readFileSync(join(here, 'shots.json'), 'utf8'));
-const tmp = join(here, '.shots-tmp');
-mkdirSync(tmp, { recursive: true });
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const policyPath = join(tmp, 'webgl-policy.txt');
-writeFileSync(policyPath, 'hatch-webgl-allowed-domains-v1\nexample.com\n');
-const policySha = createHash('sha256').update(readFileSync(policyPath)).digest('hex');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const server = spawn('node', ['serve.ts', '--port', String(PORT)], { cwd: here, stdio: 'ignore' });
-const chrome = spawn(CHROME, [
-  '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--hide-scrollbars',
-  `--user-data-dir=${join(tmp, 'profile')}`,  `--remote-debugging-port=${CDP_PORT}`,
-  `--hatch-webgl-allowed-domains-file=${policyPath}`,
-  `--hatch-webgl-allowed-domains-sha256=${policySha}`,
-  'about:blank',
-], { stdio: 'ignore' });
-
-async function waitForJson(url, tries = 60) {
-  for (let i = 0; i < tries; i += 1) {
+async function waitForEndpoint() {
+  for (let i = 0; i < 60; i += 1) {
     try {
-      const res = await fetch(url);
-      if (res.ok) return res;
+      const r = await fetch(`http://127.0.0.1:${PORT}/json/version`);
+      if (r.ok) return;
     } catch { /* not up yet */ }
     await sleep(250);
   }
-  throw new Error(`never came up: ${url}`);
+  throw new Error('Chromium CDP endpoint never came up');
 }
 
-// A minimal DevTools-protocol client: just enough to navigate, wait for load and capture a PNG.
-function connectCdp(wsUrl) {
-  const ws = new WebSocket(wsUrl);
-  let nextId = 1;
-  const pending = new Map();
-  const loadWaiters = [];
-  ws.addEventListener('message', (event) => {
-    const msg = JSON.parse(event.data);
-    if (msg.id && pending.has(msg.id)) {
-      const { resolve, reject } = pending.get(msg.id);
-      pending.delete(msg.id);
-      if (msg.error) reject(new Error(msg.error.message)); else resolve(msg.result);
-    }
-    if (msg.method === 'Page.loadEventFired') loadWaiters.splice(0).forEach((fn) => fn());
-  });
-  const opened = new Promise((resolve, reject) => {
-    ws.addEventListener('open', resolve, { once: true });
-    ws.addEventListener('error', reject, { once: true });
-  });
-  return {
-    async send(method, params = {}) {
-      await opened;
-      const id = nextId;
-      nextId += 1;
-      const result = new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
-      ws.send(JSON.stringify({ id, method, params }));
-      return result;
-    },
-    waitForLoad() {
-      return new Promise((resolve) => { loadWaiters.push(resolve); setTimeout(resolve, 12000); });
-    },
-    close() { ws.close(); },
-  };
-}
-
-async function waitForAppReady(cdp) {
-  for (let i = 0; i < 50; i += 1) {
-    const res = await cdp.send('Runtime.evaluate', {
-      expression: 'location.href.startsWith("http://127.0.0.1") && document.readyState === "complete" && !!document.querySelector("#trophy-list .trophy-row, #view-roadmap .stage-card, #view-missables .miss-card, #view-sources .source-table")',
-      returnByValue: true,
-    }).catch(() => null);
-    if (res && res.result && res.result.value === true) return;
-    await sleep(300);
+class CDP {
+  constructor(ws) {
+    this.ws = ws;
+    this.seq = 0;
+    this.pending = new Map();
+    this.waiters = [];
+    ws.addEventListener('message', (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.id && this.pending.has(msg.id)) {
+        const { resolve, reject } = this.pending.get(msg.id);
+        this.pending.delete(msg.id);
+        if (msg.error) reject(new Error(msg.error.message));
+        else resolve(msg.result);
+      } else if (msg.method) {
+        this.waiters = this.waiters.filter((w) => {
+          if (w.method === msg.method) { w.resolve(msg.params); return false; }
+          return true;
+        });
+      }
+    });
   }
-  throw new Error('the app never rendered');
-}
-
-async function capturePng(shot, index) {
-  // This build's Local Network Access checks refuse a browser-initiated jump straight to the local
-  // preview server ("initiated by a public page"), so each shot enters through a tiny local launcher
-  // page that redirects to the served app — the app itself is the kit's serve.ts over HTTP, unchanged.
-  const target = await (await fetch(`http://localhost:${CDP_PORT}/json/new?about:blank`, { method: 'PUT' })).json();
-  const cdp = connectCdp(target.webSocketDebuggerUrl);
-  await cdp.send('Page.enable');
-  await cdp.send('Runtime.enable');
-  await cdp.send('Emulation.setDeviceMetricsOverride', {
-    width: shot.viewport.width, height: shot.viewport.height, deviceScaleFactor: 1, mobile: false,
-  });
-  const goViaLauncher = async (appUrl, name) => {
-    const launcher = join(tmp, `go-${index}-${name}.html`);
-    writeFileSync(launcher, `<!doctype html><script>location.replace(${JSON.stringify(appUrl)})</script>`);
-    await cdp.send('Page.navigate', { url: `file://${launcher}` });
-    await waitForAppReady(cdp);
-  };
-  // Start every shot from a clean browser store so each one shows exactly the state its URL declares.
-  await goViaLauncher(`http://127.0.0.1:${PORT}/`, 'reset');
-  await cdp.send('Runtime.evaluate', { expression: 'localStorage.clear()' });
-  await goViaLauncher(`http://127.0.0.1:${PORT}${shot.path}`, 'shot');
-  await sleep(900); // let fonts and scroll positions settle
-  const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
-  cdp.close();
-  await fetch(`http://localhost:${CDP_PORT}/json/close/${target.id}`).catch(() => {});
-  const png = join(tmp, shot.file.replace(/\.jpg$/, '.png'));
-  writeFileSync(png, Buffer.from(data, 'base64'));
-  return png;
-}
-
-function convertToJpeg(png, out) {
-  // ffmpeg qscale: 2 (best) .. 31 (worst). Walk down until the file fits the 256 KiB cap.
-  for (const q of [3, 4, 5, 6, 7, 8]) {
-    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', png, '-q:v', String(q), out]);
-    const size = statSync(out).size;
-    if (size <= 262144) return { q, size };
+  send(method, params = {}) {
+    const id = (this.seq += 1);
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.ws.send(JSON.stringify({ id, method, params }));
+    });
   }
-  return { q: 8, size: statSync(out).size };
+  once(method) {
+    return new Promise((resolve) => this.waiters.push({ method, resolve }));
+  }
 }
+
+// This Chromium build refuses to start without a Hatch WebGL domain policy:
+// a one-line contract file plus its SHA-256, passed as switches.
+const policyText = 'hatch-webgl-all-origins-v1\n';
+const policyPath = '/tmp/platinum-webgl-policy.txt';
+writeFileSync(policyPath, policyText);
+const policySha = createHash('sha256').update(policyText).digest('hex');
+
+const chrome = spawn(CHROME, [
+  '--headless=new',
+  `--remote-debugging-port=${PORT}`,
+  `--hatch-webgl-allowed-domains-file=${policyPath}`,
+  `--hatch-webgl-allowed-domains-sha256=${policySha}`,
+  '--user-data-dir=/tmp/platinum-shots-profile',
+  '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+  '--allow-file-access-from-files',
+  '--force-device-scale-factor=1', '--window-size=1280,720',
+  'about:blank',
+], { stdio: 'ignore' });
 
 try {
-  await waitForJson(`http://localhost:${PORT}/`);
-  await waitForJson(`http://localhost:${CDP_PORT}/json/version`);
-  for (const [index, shot] of shots.entries()) {
-    const out = join(here, 'screenshots', shot.file);
-    const png = await capturePng(shot, index);
-    const { q, size } = convertToJpeg(png, out);
-    const dims = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0',
-      '-show_entries', 'stream=width,height', '-of', 'csv=p=0', out]).toString().trim();
-    console.log(`${shot.file}: ${dims}, ${(size / 1024).toFixed(1)} KiB, ffmpeg q=${q}`);
-    if (size > 262144) throw new Error(`${shot.file} is over the 256 KiB cap`);
+  await waitForEndpoint();
+  // Open the first shot's URL as the initial target: starting from about:blank
+  // makes Chromium treat the local page as a public page reaching the LAN.
+  const firstUrl = encodeURIComponent(BASE + shots[0].path);
+  const created = await (await fetch(`http://127.0.0.1:${PORT}/json/new?${firstUrl}`, { method: 'PUT' })).json();
+  const ws = new WebSocket(created.webSocketDebuggerUrl);
+  await new Promise((res, rej) => { ws.addEventListener('open', res, { once: true }); ws.addEventListener('error', rej, { once: true }); });
+  const cdp = new CDP(ws);
+  await cdp.send('Page.enable');
+  await cdp.send('Runtime.enable');
+
+  for (const shot of shots) {
+    const { width, height } = shot.viewport;
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+    const loaded = cdp.once('Page.loadEventFired');
+    await cdp.send('Page.navigate', { url: BASE + shot.path });
+    await loaded;
+    // Wait until the app has rendered its trophy list (data fetched + DOM built).
+    let rendered = false;
+    for (let i = 0; i < 40; i += 1) {
+      const r = await cdp.send('Runtime.evaluate', {
+        expression: "document.querySelectorAll('#list .row').length",
+        returnByValue: true,
+      });
+      if (r.result && r.result.value > 0) { rendered = true; break; }
+      await sleep(250);
+    }
+    if (!rendered) throw new Error(`App did not render for ${shot.file} (${shot.path})`);
+    await sleep(700);
+    let quality = 85;
+    let buf = null;
+    while (quality >= 45) {
+      const shotRes = await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality, fromSurface: true });
+      buf = Buffer.from(shotRes.data, 'base64');
+      if (buf.length <= MAX_BYTES) break;
+      quality -= 15;
+    }
+    writeFileSync(join(here, 'screenshots', shot.file), buf);
+    console.log(`${shot.file}: ${buf.length} bytes (jpeg quality ${quality})`);
   }
+  ws.close();
 } finally {
-  chrome.kill();
-  server.kill();
-  if (existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
+  chrome.kill('SIGTERM');
 }

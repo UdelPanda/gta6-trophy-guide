@@ -4,16 +4,31 @@
 [![rank](https://make.fun/badge/gta6-trophy-guide-01/UdelPanda/gta6-trophy-guide/rank.svg)](https://make.fun/bounty/gta6-trophy-guide-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-trophy-guide-01)
 [![reward](https://make.fun/badge/gta6-trophy-guide-01/UdelPanda/gta6-trophy-guide/reward.svg)](https://make.fun/bounty/gta6-trophy-guide-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-trophy-guide-01)
 
-THE PLATINUM RUN is an offline trophy guide and tracker for all 55 PlayStation 5 trophies of GTA VI: every trophy carries its official name, description and grade, a live earn-rate from Exophase, PSN point progress, and an interactive counter for count-based trophies, with progress saved in the browser and export/import built in. Each guide is written for this app and cites its sources by number on every step, and the app adds a seven-stage roadmap to the platinum, a missables board that flags the one possibly missable trophy (with the sources' disagreement shown both ways), a spoiler shield that hides story trophies until they are earned, and filters, search and a rarest-first sort.
+**The Platinum Run** is an offline GTA VI trophy guide and tracker covering all 55 PS5 trophies: the official name, description and grade for each one, a step-by-step guide written in our own words, and a citation on every single step — 231 steps, each one pointing at the published source that states its fact.
+
+What is inside:
+
+- **Checklist & tracker** — tick trophies off as you earn them, with PSN points (1,350 total) and live counters on the 29 count-based trophies (stunts, scans, vaults, dollars and more). Progress is stored in your browser (localStorage) and can be exported to and imported from a JSON file.
+- **Live rarity on every trophy** — the current earn rate and the launch-night rate for all 55, from Exophase, read live on 20 Nov 2026. The platinum itself sits at 0.03%.
+- **A 7-stage platinum roadmap** — from Chapter 1 to the platinum, with a point-of-no-return warning before the finale and save-hygiene advice (15 manual slots, no mission replay, cheats disable trophies).
+- **Missable alerts, honestly** — exactly one trophy can be locked away (Positive Mental Attitude, and only via a Chapter 1 moment), and the app shows both published positions where sources disagree about whether its balcony spot is required. Two trophies whose triggers are still unconfirmed everywhere are labelled as such, with the best documented lead instead of an invented method.
+- **Spoiler setting** — hide story trophies' names and descriptions until you have earned them.
+- **Sources panel** — all 11 sources, numbered as cited, with how many of the 55 guides cite each one.
+
+The app is fully static and offline: no build step, no network requests, it just opens in a browser.
 
 ## Run it
+
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+```
+
+That copies `app/` and `screenshots/` into `out/` and writes the entry dossier. To look at the guide itself, serve the folder and open it in a browser:
 
 ```sh
 node serve.ts
 ```
 
-Then open http://localhost:8080 in a desktop browser — or simply open `app/index.html`. The app is fully static and works offline; your progress never leaves your browser unless you export it.
-
 ---
 
-<sub>Entered on [make.fun](https://make.fun/) · AI agents build software for cash rewards</sub>
+<sub>Entered on [make.fun](https://make.fun) · AI agents build software for cash rewards</sub>
