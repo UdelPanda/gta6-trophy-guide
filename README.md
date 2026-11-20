@@ -4,30 +4,29 @@
 [![rank](https://make.fun/badge/gta6-trophy-guide-01/UdelPanda/gta6-trophy-guide/rank.svg)](https://make.fun/bounty/gta6-trophy-guide-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-trophy-guide-01)
 [![reward](https://make.fun/badge/gta6-trophy-guide-01/UdelPanda/gta6-trophy-guide/reward.svg)](https://make.fun/bounty/gta6-trophy-guide-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-trophy-guide-01)
 
-**The Platinum Run** is an offline GTA VI trophy guide and tracker covering all 55 PS5 trophies: the official name, description and grade for each one, a step-by-step guide written in our own words, and a citation on every single step — 231 steps, each one pointing at the published source that states its fact.
-
-What is inside:
-
-- **Checklist & tracker** — tick trophies off as you earn them, with PSN points (1,350 total) and live counters on the 29 count-based trophies (stunts, scans, vaults, dollars and more). Progress is stored in your browser (localStorage) and can be exported to and imported from a JSON file.
-- **Live rarity on every trophy** — the current earn rate and the launch-night rate for all 55, from Exophase, read live on 20 Nov 2026. The platinum itself sits at 0.03%.
-- **A 7-stage platinum roadmap** — from Chapter 1 to the platinum, with a point-of-no-return warning before the finale and save-hygiene advice (15 manual slots, no mission replay, cheats disable trophies).
-- **Missable alerts, honestly** — exactly one trophy can be locked away (Positive Mental Attitude, and only via a Chapter 1 moment), and the app shows both published positions where sources disagree about whether its balcony spot is required. Two trophies whose triggers are still unconfirmed everywhere are labelled as such, with the best documented lead instead of an invented method.
-- **Spoiler setting** — hide story trophies' names and descriptions until you have earned them.
-- **Sources panel** — all 11 sources, numbered as cited, with how many of the 55 guides cite each one.
-
-The app is fully static and offline: no build step, no network requests, it just opens in a browser.
+**THE PLATINUM RUN** — a complete guide and tracker for all 55 official GTA VI trophies on PS5. Every trophy carries its official name, description and grade, a guide written in our own words with every step cited to the source that states it, and a **live rarity figure read from Exophase** (20 Nov 2026) next to its launch-night figure. Working counters track the 29 count-based trophies, progress saves in the browser with export/import, a spoiler setting hides the 28 hidden trophies until earned, a 7-stage roadmap walks you to the platinum, and the game's one possibly-missable trophy — Positive Mental Attitude — is flagged with the disagreement between sources shown, not hidden.
 
 ## Run it
+
+No build step and no server needed: open `app/index.html` in a browser. If you prefer serving it:
+
+```sh
+node serve.ts
+# then open http://localhost:8080
+```
+
+To hand the entry in the way the grader does:
 
 ```sh
 mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
 
-That copies `app/` and `screenshots/` into `out/` and writes the entry dossier. To look at the guide itself, serve the folder and open it in a browser:
+## What's inside
 
-```sh
-node serve.ts
-```
+- `app/` — the static app (checklist, roadmap, missables, sources) plus `app/data/trophies.json` with all 55 trophies, 222 cited steps, 11 sources and the rarity data.
+- `screenshots/` — four captures of the app: the checklist with the missable trophy open, the roadmap, the missables view and the sources table.
+- `main.ts` — copies `app/` and `screenshots/` to the output directory and writes the dossier.
+- `shots.mjs` — the screenshot tooling (headless Chrome over CDP) that produced the captures in `screenshots/`.
 
 ---
 
