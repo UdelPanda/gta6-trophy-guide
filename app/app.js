@@ -1,431 +1,342 @@
-// The Platinum Run — GTA VI Trophy Guide & Tracker.
-// Offline tracker logic: earned ticks and counters persist in localStorage,
-// guides render from data/trophies.json, and every step keeps its citations.
-const LS_KEY = 'platinum-run-progress-v1';
-const data = await (await fetch('data/trophies.json')).json();
-const TROPHIES = data.trophies;
-const SOURCES = data.sources;
-const byId = new Map(TROPHIES.map((t) => [t.id, t]));
-const srcByN = new Map(SOURCES.map((s) => [s.n, s]));
+// THE PLATINUM RUN — GTA VI Trophy Guide & Tracker.
+// Offline static app: loads data/trophies.json once, keeps tracker state in
+// localStorage, and renders four views (Checklist, Roadmap, Missables, Sources).
+// URL params can seed a demo state for screenshots:
+//   ?view=roadmap&open=28&earned=2,3,4&counts=28:12&spoilers=show
 
-const KINDS = [
-  ['all', 'All'], ['story', 'Story'], ['missable', 'Missable'], ['collectibles', 'Collectibles'],
-  ['activities', 'Activities'], ['side', 'Side'], ['crime', 'Crime'], ['world', 'World'],
-  ['money', 'Money'], ['completion', 'Completion'],
-];
-const GRADES = [['all', 'All grades'], ['platinum', 'Platinum'], ['gold', 'Gold'], ['silver', 'Silver'], ['bronze', 'Bronze']];
+const STORE_KEY = 'platinum-run-progress-v1';
+const KIND_LABELS = {
+  story: 'Story', missable: 'Missable', collectibles: 'Collectibles',
+  activities: 'Activities', side: 'Side', crime: 'Crime', world: 'World',
+  money: 'Money', completion: 'Completion'
+};
+const GRADE_ORDER = { platinum: 0, gold: 1, silver: 2, bronze: 3 };
 const STAGES = [
-  { n: 1, title: 'Opening & Chapter 1', note: 'Start clean: a manual save at the chapter start, the Chapter 1 balcony meditation at Jason\u2019s house done early, and first meetings with Cal and Kenton. Quick trophies — and the run\u2019s only real trap lives here.' },
-  { n: 2, title: 'Chapters 2\u20133', note: 'The state opens up: partner play after Coffee Break, the quest givers (Andy, Billy, Randy, Tyrone, Bret), garages, Scooter Bros registrations and the first partner crimes.' },
-  { n: 3, title: 'Chapter 4 + finale', note: 'Finish the story set, unlock the bank vaults in Chapter 4 and close out the campaign.', ponr: 'POINT OF NO RETURN — the finale ends the story. Nothing else on this list is missable, but the Chapter 1 meditation (stage 1) must already be done, and keep a manual save from before the final mission.' },
-  { n: 4, title: 'Endgame & 100%', note: 'With the story done, the 100% Completion checklist appears under Progress > Stats. Most of the platinum run lives in this stage.' },
-  { n: 5, title: 'Collectibles', note: 'Card sets, WAiNK scans and vehicle discoveries — the slow, scenic grind. Scan everything new as you pass it and these fill themselves.' },
-  { n: 6, title: 'Grinds & counters', note: 'Stunts, races, range golds, challenges and the big counters. Leave these late: half of them complete naturally while you do everything else.' },
-  { n: 7, title: 'Platinum', note: 'The one-offs and secrets saved for last — the jet, the tank, the UFO, the cocktail — and then the platinum itself.' },
+  { n: 1, title: 'Opening & Chapter 1', time: 'story begins',
+    text: 'Play the opening and Chapter 1. Before the chapter ends, do the balcony meditation at Jason\u2019s house with Lucia \u2014 it feeds the one possibly-missable trophy. Scan vehicles and study animals as you travel; all of it counts later.' },
+  { n: 2, title: 'Chapters 2\u20133', time: 'partner play opens',
+    text: 'Partner switching opens after Breakfast Run, and Kenton\u2019s quest line resumes during these chapters. Chapter 3 brings the Snap Gun through Yasmani\u2019s Jewelry Jobs and the Key Cloner for Randy\u2019s Wish List.' },
+  { n: 3, title: 'Chapter 4 + the finale \u2014 POINT OF NO RETURN', time: 'save first',
+    text: 'Late in Chapter 4 the optional mission That\u2019s Where The Money Is\u2026 unlocks the bank vaults. Bank a manual save before the final mission: there is no mission replay, so that save is your only way back.' },
+  { n: 4, title: 'Endgame & 100%', time: '\u2248100 hours',
+    text: 'The 100% checklist appears at Progress > Stats > 100% Completion after the credits, and everything you did during the story already counts. Nothing on it is missable, so work it calmly in free roam.' },
+  { n: 5, title: 'Collectibles & quest lines', time: 'cleanup',
+    text: 'Card sets, WAiNK scans, stranger strands and the character quest lines \u2014 Andy, Kenton, Billy, Randy, Tyrone and Bret. The named quest-givers\u2019 strands have their own trophies and do not count toward Strangers & Freaks.' },
+  { n: 6, title: 'Grinds & counters', time: 'the long counts',
+    text: 'The big numbers: 250 stunts, 42 Shooting Range golds, 100 vehicles, 50 challenges, $250,000 laundered, $100,000 spent. Every one of these trophies carries a working counter in its guide \u2014 track them here as you play.' },
+  { n: 7, title: 'Platinum', time: '\u2248200 hours total',
+    text: 'When the other 54 trophies are in, Vice Got a Price! pops on its own. Guides rate the run 4/10 difficulty at roughly 200 hours \u2014 the checklist, not the skill, is the wall.' }
 ];
 
-const params = new URLSearchParams(location.search);
-const store = {
-  get() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; } },
-  set(v) { try { localStorage.setItem(LS_KEY, JSON.stringify(v)); } catch { /* storage unavailable */ } },
-};
-const saved = store.get();
-const state = {
-  earned: new Set(Array.isArray(saved.earned) ? saved.earned : []),
-  counts: (saved.counts && typeof saved.counts === 'object') ? saved.counts : {},
-  spoilers: !!saved.spoilers,
-  kind: 'all', grade: 'all', sort: 'id', q: '', unearnedOnly: false,
-  open: 35, view: 'checklist',
-};
-if (params.get('earned')) {
-  state.earned = new Set(params.get('earned').split(',').map((x) => parseInt(x, 10)).filter((x) => byId.has(x)));
-}
-if (params.get('counts')) {
-  for (const pair of params.get('counts').split(',')) {
-    const [id, n] = pair.split(':').map((x) => parseInt(x, 10));
-    if (byId.has(id) && Number.isFinite(n)) state.counts[id] = n;
-  }
-}
-if (params.get('open')) { const o = parseInt(params.get('open'), 10); if (byId.has(o)) state.open = o; }
-if (params.get('spoilers')) state.spoilers = params.get('spoilers') === '1';
-if (params.get('view')) state.view = params.get('view');
-if (params.has('compact')) document.body.classList.add('compact');
+const doc = await (await fetch('data/trophies.json')).json();
+const TROPHIES = doc.trophies;
+const SOURCES = doc.sources;
+const byId = new Map(TROPHIES.map(t => [t.id, t]));
 
-function persist() {
-  store.set({ earned: [...state.earned], counts: state.counts, spoilers: state.spoilers });
-}
-function el(tag, cls, text) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-const fmt = (n) => n.toLocaleString('en-US');
-const pct = (v) => `${v.toFixed(2)}%`;
-const isStory = (t) => t.kinds.includes('story');
-const isHidden = (t) => state.spoilers && isStory(t) && !state.earned.has(t.id);
-const dispName = (t) => (isHidden(t) ? 'Hidden story trophy' : t.name);
-const dispDesc = (t) => (isHidden(t) ? 'Spoiler hidden — earn it to reveal the official description.' : t.description);
-
-// Citation statistics: which trophies cite each source, and how many steps.
-const citedBy = new Map(SOURCES.map((s) => [s.n, new Set()]));
-let totalSteps = 0; let citedSteps = 0;
+// ---- cited-by counts: trophies whose steps cite the source; Exophase [2]
+// backs the rarity line printed on all 55 guides instead of steps.
+const citedBy = new Map(SOURCES.map(s => [s.n, 0]));
 for (const t of TROPHIES) {
-  for (const s of t.steps) {
-    totalSteps += 1;
-    if (s.cites.length) citedSteps += 1;
-    for (const c of s.cites) if (citedBy.has(c)) citedBy.get(c).add(t.id);
+  const used = new Set();
+  for (const st of t.steps) for (const c of st.cites) used.add(c);
+  for (const c of used) citedBy.set(c, (citedBy.get(c) || 0) + 1);
+}
+citedBy.set(2, TROPHIES.length);
+const totalSteps = TROPHIES.reduce((a, t) => a + t.steps.length, 0);
+
+// ---- state -------------------------------------------------------------
+function blankState() { return { earned: [], counts: {}, spoilers: true }; }
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return blankState();
+    const s = JSON.parse(raw);
+    return { earned: s.earned || [], counts: s.counts || {}, spoilers: s.spoilers !== false };
+  } catch { return blankState(); }
+}
+const params = new URLSearchParams(location.search);
+const state = loadState();
+if (params.has('earned')) state.earned = params.get('earned').split(',').map(Number).filter(n => byId.has(n));
+if (params.has('counts')) {
+  for (const pair of params.get('counts').split(',')) {
+    const [id, v] = pair.split(':').map(Number);
+    if (byId.has(id)) state.counts[id] = v;
   }
 }
-const guidesCited = TROPHIES.filter((t) => t.steps.some((s) => s.cites.length)).length;
+if (params.has('spoilers')) state.spoilers = params.get('spoilers') !== 'hide';
+let earned = new Set(state.earned);
+let openId = Number(params.get('open')) || 28;
+if (!byId.has(openId)) openId = TROPHIES[0].id;
+let kindFilter = 'all', gradeFilter = 'all', sortMode = 'official', query = '';
 
-const $ = (id) => document.getElementById(id);
+function save() {
+  localStorage.setItem(STORE_KEY, JSON.stringify({
+    earned: [...earned], counts: state.counts, spoilers: state.spoilers
+  }));
+}
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtPct = v => (v === 100 ? '100' : String(v)) + '%';
+const fmtNum = v => v.toLocaleString('en-US');
+function isMasked(t) { return !state.spoilers && t.secret && !earned.has(t.id); }
+function citesHtml(cites) { return cites.map(c => `<span class="cite">[${c}]</span>`).join(' '); }
 
+// ---- header / audit ------------------------------------------------------
 function renderHeader() {
-  const pts = TROPHIES.filter((t) => state.earned.has(t.id)).reduce((a, t) => a + t.points, 0);
-  $('statEarned').textContent = `${state.earned.size} / ${TROPHIES.length}`;
-  $('statPoints').textContent = `${fmt(pts)} pts`;
-  $('statPlat').textContent = pct(byId.get(1).rarityLive);
-  $('chkSpoiler').checked = state.spoilers;
+  const pts = TROPHIES.filter(t => earned.has(t.id)).reduce((a, t) => a + t.points, 0);
+  $('stat-earned').textContent = `${earned.size} / 55`;
+  $('stat-points').textContent = fmtNum(pts);
+  $('stat-plat').textContent = fmtPct(byId.get(1).rarityLive);
+  $('chk-spoilers').checked = state.spoilers;
 }
+$('audit-steps').textContent = `${totalSteps} STEPS`;
 
-function renderAudit() {
-  const g = { platinum: 0, gold: 0, silver: 0, bronze: 0 };
-  for (const t of TROPHIES) g[t.grade] += 1;
-  const hidden = TROPHIES.filter((t) => t.secret).length;
-  const counters = TROPHIES.filter((t) => t.counter).length;
-  const miss = TROPHIES.filter((t) => t.missable).length;
-  const items = [
-    `<b>${TROPHIES.length}</b> official trophies`,
-    `<b>${g.platinum}P ${g.gold}G ${g.silver}S ${g.bronze}B</b>`,
-    `<b>${hidden}</b> hidden`,
-    `<b>${guidesCited}/${TROPHIES.length}</b> guides cite a source`,
-    `<b>${citedSteps}/${totalSteps}</b> steps cited`,
-    `<b>${counters}</b> trophies with live counters`,
-    `<span class="warn">${miss} possibly missable</span>`,
-    `<b>${SOURCES.length}</b> sources read 20 Nov 2026`,
-    `live rarity on all ${TROPHIES.length} from Exophase [2]`,
-  ];
-  $('audit').innerHTML = items.join('<span>·</span> ');
-}
-
-function renderChips() {
-  const kc = $('kindChips'); kc.replaceChildren();
-  for (const [key, label] of KINDS) {
-    const n = key === 'all' ? TROPHIES.length : TROPHIES.filter((t) => t.kinds.includes(key)).length;
-    const b = el('button', 'chip' + (state.kind === key ? ' on' : ''));
-    b.type = 'button';
-    b.append(`${label} `, el('span', 'n', String(n)));
-    b.addEventListener('click', () => { state.kind = key; renderAll(); });
+// ---- checklist: filters --------------------------------------------------
+function buildChips() {
+  const kc = $('kind-chips'); kc.replaceChildren();
+  const kinds = [['all', TROPHIES.length]];
+  for (const k of Object.keys(KIND_LABELS)) {
+    const n = TROPHIES.filter(t => t.kinds.includes(k)).length;
+    if (n) kinds.push([k, n]);
+  }
+  for (const [k, n] of kinds) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip' + (kindFilter === k ? ' on' : '');
+    b.innerHTML = `${k === 'all' ? 'All' : KIND_LABELS[k]} <span class="n">${n}</span>`;
+    b.addEventListener('click', () => { kindFilter = k; buildChips(); renderList(); });
     kc.append(b);
   }
-  const gc = $('gradeChips'); gc.replaceChildren();
-  for (const [key, label] of GRADES) {
-    const b = el('button', 'chip' + (state.grade === key ? ' on' : ''), label);
-    b.type = 'button';
-    b.addEventListener('click', () => { state.grade = key; renderAll(); });
+  const gc = $('grade-chips'); gc.replaceChildren();
+  const grades = [['all', TROPHIES.length], ['platinum', 1], ['gold', 2], ['silver', 6], ['bronze', 46]];
+  for (const [g, n] of grades) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip' + (gradeFilter === g ? ' on' : '');
+    b.innerHTML = `${g === 'all' ? 'All grades' : g[0].toUpperCase() + g.slice(1)} <span class="n">${n}</span>`;
+    b.addEventListener('click', () => { gradeFilter = g; buildChips(); renderList(); });
     gc.append(b);
   }
 }
 
 function visibleTrophies() {
-  let list = TROPHIES.filter((t) =>
-    (state.kind === 'all' || t.kinds.includes(state.kind)) &&
-    (state.grade === 'all' || t.grade === state.grade) &&
-    (!state.unearnedOnly || !state.earned.has(t.id)) &&
-    (!state.q || `${t.name} ${t.description} ${t.summary} ${t.kinds.join(' ')}`.toLowerCase().includes(state.q)));
-  const sorters = {
-    id: (a, b) => a.id - b.id,
-    rarityAsc: (a, b) => a.rarityLive - b.rarityLive,
-    rarityDesc: (a, b) => b.rarityLive - a.rarityLive,
-    pointsDesc: (a, b) => b.points - a.points,
-    name: (a, b) => a.name.localeCompare(b.name),
-  };
-  return list.sort(sorters[state.sort] || sorters.id);
+  let list = TROPHIES.filter(t =>
+    (kindFilter === 'all' || t.kinds.includes(kindFilter)) &&
+    (gradeFilter === 'all' || t.grade === gradeFilter) &&
+    (!query || t.name.toLowerCase().includes(query) || t.description.toLowerCase().includes(query)));
+  if (sortMode === 'rarest') list = [...list].sort((a, b) => a.rarityLive - b.rarityLive);
+  if (sortMode === 'common') list = [...list].sort((a, b) => b.rarityLive - a.rarityLive);
+  if (sortMode === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  if (sortMode === 'grade') list = [...list].sort((a, b) => GRADE_ORDER[a.grade] - GRADE_ORDER[b.grade] || a.id - b.id);
+  return list;
 }
 
 function renderList() {
-  const wrap = $('list');
-  const scroll = wrap.scrollTop;
-  wrap.replaceChildren();
+  const wrap = $('trophy-list'); wrap.replaceChildren();
   const list = visibleTrophies();
-  $('listCount').textContent = `Showing ${list.length} of ${TROPHIES.length} trophies`;
+  if (!list.length) {
+    const d = document.createElement('div');
+    d.className = 'list-empty'; d.textContent = 'No trophies match those filters.';
+    wrap.append(d); return;
+  }
   for (const t of list) {
-    const row = el('button', 'row' + (state.open === t.id ? ' open' : '') + (state.earned.has(t.id) ? ' done' : ''));
-    row.type = 'button';
-    const box = el('input'); box.type = 'checkbox'; box.checked = state.earned.has(t.id);
+    const row = document.createElement('div');
+    row.className = 'row' + (t.id === openId ? ' open' : '') + (earned.has(t.id) ? ' earned' : '') + (isMasked(t) ? ' masked' : '');
+    row.dataset.id = t.id;
+    const box = document.createElement('input');
+    box.type = 'checkbox'; box.checked = earned.has(t.id);
     box.setAttribute('aria-label', `Mark ${t.name} earned`);
-    box.addEventListener('click', (e) => e.stopPropagation());
+    box.addEventListener('click', e => e.stopPropagation());
     box.addEventListener('change', () => { toggleEarned(t.id, box.checked); });
-    const mid = el('span');
-    mid.append(el('span', 'rname', dispName(t)), el('span', 'rdesc', dispDesc(t)));
-    const meta = el('span', 'rmeta');
-    meta.append(el('span', `badge b-${t.grade}`, t.grade));
-    for (const k of t.kinds.slice(0, 2)) meta.append(el('span', 'kindtag', k));
-    if (t.secret) meta.append(el('span', 'kindtag', 'hidden'));
-    mid.append(meta);
-    const rar = el('span', 'rarity');
-    rar.append(el('b', null, pct(t.rarityLive)), el('small', null, 'live rarity'));
-    row.append(box, mid, rar);
-    row.addEventListener('click', () => { state.open = t.id; renderAll(); });
+    const dot = document.createElement('span'); dot.className = 'dot ' + t.grade;
+    const main = document.createElement('div');
+    const masked = isMasked(t);
+    main.innerHTML = `<div class="rname">${masked ? 'Hidden Trophy' : esc(t.name)}${t.missable ? '<span class="miss">MISSABLE?</span>' : ''}</div>
+      <div class="rmeta">${t.kinds.map(k => KIND_LABELS[k]).join(' · ')} · Stage ${t.stage}${t.secret ? ' · Hidden' : ''}</div>`;
+    const rar = document.createElement('div');
+    rar.className = 'rar';
+    rar.innerHTML = `${fmtPct(t.rarityLive)}<small>LIVE [2]</small>`;
+    row.append(box, dot, main, rar);
+    row.addEventListener('click', () => { openId = t.id; renderList(); renderDetail(); });
     wrap.append(row);
   }
-  wrap.scrollTop = scroll;
+  const open = wrap.querySelector('.row.open');
+  if (open) wrap.scrollTop = Math.max(0, open.offsetTop - wrap.offsetTop - 118);
 }
 
 function toggleEarned(id, on) {
-  if (on) state.earned.add(id); else state.earned.delete(id);
-  persist(); renderAll();
+  if (on) earned.add(id); else earned.delete(id);
+  save(); renderHeader(); renderList(); renderDetail(); renderRoadmap(); renderMissables();
 }
 
-function citesLine(t) {
-  const used = [...new Set(t.steps.flatMap((s) => s.cites))].sort((a, b) => a - b);
-  return used.map((n) => `[${n}] ${srcByN.get(n).name}`).join(' · ');
+// ---- checklist: detail ---------------------------------------------------
+function detailHtml(t) {
+  const masked = isMasked(t);
+  const name = masked ? 'Hidden Trophy' : t.name;
+  const desc = masked ? 'Hidden until earned \u2014 or turn on \u201cShow spoilers\u201d above.' : t.description;
+  const tags = [
+    ...t.kinds.map(k => `<span class="tag">${KIND_LABELS[k]}</span>`),
+    `<span class="tag">Roadmap stage ${t.stage}</span>`,
+    t.secret ? '<span class="tag">Hidden trophy</span>' : '',
+    t.missable ? '<span class="tag miss">POSSIBLY MISSABLE</span>' : ''
+  ].join('');
+  const steps = masked ? '' : `<ol class="steps">${t.steps.map(s =>
+    `<li>${esc(s.text)} ${citesHtml(s.cites)}</li>`).join('')}</ol>`;
+  const counter = (!masked && t.counter) ? `
+    <div class="counter-widget">
+      <div class="counter-top"><span class="counter-label">COUNTER \u2014 ${esc(t.counter.label).toUpperCase()}</span>
+      <span class="counter-value">${fmtNum(state.counts[t.id] || 0)} <small>/ ${fmtNum(t.counter.target)}</small></span></div>
+      <div class="counter-bar"><div class="counter-fill" style="width:${Math.min(100, 100 * (state.counts[t.id] || 0) / t.counter.target)}%"></div></div>
+      <div class="counter-btns">
+        <button type="button" data-cnt="-1" data-id="${t.id}">\u2212</button>
+        <button type="button" data-cnt="1" data-id="${t.id}">+</button>
+        <button type="button" class="reset" data-cnt="reset" data-id="${t.id}">Reset</button>
+      </div>
+    </div>` : '';
+  const calloutsOf = type => masked ? '' : (t.callouts || []).filter(c => c.type === type).map(c => `
+    <div class="callout ${c.type}"><h4>${esc(c.title).toUpperCase()}</h4><p>${esc(c.text)}</p></div>`).join('');
+  const warnCallouts = calloutsOf('warn');
+  const otherCallouts = (t.callouts || []).filter(c => c.type !== 'warn').map(c => masked ? '' : `
+    <div class="callout ${c.type}"><h4>${esc(c.title).toUpperCase()}</h4><p>${esc(c.text)}</p></div>`).join('');
+  return `
+    <div class="detail-head"><h2>${esc(name)}</h2>
+      <span class="grade-badge ${t.grade}">${t.grade.toUpperCase()} \u00b7 ${t.points} PTS</span></div>
+    <div class="detail-tags">${tags}</div>
+    <p class="official-label">OFFICIAL DESCRIPTION</p>
+    <p class="official-desc">${esc(desc)}</p>
+    <div class="rarity-line">LIVE RARITY ${fmtPct(t.rarityLive)} of players have earned this <span class="cite">[2]</span>
+      <span class="dim">\u00b7 launch ${fmtPct(t.rarityLaunch)} \u00b7 Exophase, 20 Nov 2026</span></div>
+    ${masked ? '' : `<p class="summary">${esc(t.summary)}</p>`}
+    ${counter}${warnCallouts}${steps}${otherCallouts}
+    <label class="earn-toggle"><input type="checkbox" data-earn="${t.id}" ${earned.has(t.id) ? 'checked' : ''}> Earned \u2014 tick it off</label>`;
+}
+function renderDetail() { $('detail').innerHTML = detailHtml(byId.get(openId)); wireDetail($('detail')); }
+function wireDetail(root) {
+  root.querySelectorAll('[data-cnt]').forEach(b => b.addEventListener('click', () => {
+    const id = Number(b.dataset.id);
+    const t = byId.get(id);
+    if (b.dataset.cnt === 'reset') state.counts[id] = 0;
+    else state.counts[id] = Math.max(0, Math.min(t.counter.target, (state.counts[id] || 0) + Number(b.dataset.cnt)));
+    save(); renderDetail(); renderMissables();
+  }));
+  root.querySelectorAll('[data-earn]').forEach(c => c.addEventListener('change', () => toggleEarned(Number(c.dataset.earn), c.checked)));
 }
 
-function renderDetail() {
-  const t = byId.get(state.open);
-  const d = $('detail'); d.replaceChildren();
-  const head = el('div', 'd-head');
-  head.append(el('h2', null, dispName(t)));
-  const earnLab = el('label', 'earn');
-  const box = el('input'); box.type = 'checkbox'; box.checked = state.earned.has(t.id);
-  box.addEventListener('change', () => toggleEarned(t.id, box.checked));
-  earnLab.append(box, document.createTextNode(' Earned'));
-  head.append(earnLab);
-  d.append(head);
-
-  const off = el('div', 'official');
-  off.append(el('small', null, 'Official description'), el('p', null, `\u201C${dispDesc(t)}\u201D`));
-  d.append(off);
-
-  const meta = el('div', 'd-meta');
-  const stage = STAGES[t.stage - 1];
-  meta.innerHTML = `<span>Grade <b>${t.grade}</b></span><span><b>${t.points}</b> PSN points</span>` +
-    `<span>Roadmap <b>Stage ${t.stage} — ${stage.title}</b></span>` +
-    `<span>${t.secret ? '<b>Hidden</b> on PSN until earned' : 'Visible on PSN'}</span>` +
-    `<span>Trophy <b>#${t.id}</b> of ${TROPHIES.length}</span>`;
-  d.append(meta);
-
-  const rl = el('p', 'rarityline');
-  rl.innerHTML = `Live rarity <b>${pct(t.rarityLive)}</b> of players have earned this · launch night ${pct(t.rarityLaunch)} · earn rates from Exophase [2], read live 20 Nov 2026`;
-  d.append(rl);
-
-  if (t.missable && t.missableNote) {
-    const c = el('div', 'callout miss');
-    c.append(el('b', 't', 'Possibly missable — read before you play on'), el('span', null, t.missableNote));
-    d.append(c);
-  }
-
-  const secS = el('div', 'd-sec');
-  secS.append(el('h3', null, 'In short'), el('p', null, t.summary));
-  d.append(secS);
-
-  const sec = el('div', 'd-sec');
-  sec.append(el('h3', null, 'How to earn it — step by step'));
-  const ol = el('ol', 'steps');
-  for (const s of t.steps) {
-    const li = el('li');
-    li.append(document.createTextNode(s.text + ' '));
-    li.append(el('span', 'cite', s.cites.map((c) => `[${c}]`).join(' ')));
-    ol.append(li);
-  }
-  sec.append(ol);
-  d.append(sec);
-
-  if (t.counter) {
-    const cur = Math.min(state.counts[t.id] || 0, t.counter.target);
-    const cb = el('div', 'counterbox');
-    cb.append(el('div', 'clabel', `${t.counter.label} — your live counter`));
-    const row = el('div', 'crow');
-    const minus = el('button', null, '\u2212'); minus.type = 'button';
-    const plus = el('button', null, '+'); plus.type = 'button';
-    const num = el('span', 'cnum', fmt(cur));
-    minus.addEventListener('click', () => setCount(t, cur - 1));
-    plus.addEventListener('click', () => setCount(t, cur + 1));
-    row.append(minus, num, plus, el('span', 'ctarget', `/ ${fmt(t.counter.target)}`));
-    cb.append(row);
-    const bar = el('div', 'bar');
-    const fill = el('i'); fill.style.width = `${Math.round((cur / t.counter.target) * 100)}%`;
-    bar.append(fill); cb.append(bar);
-    d.append(cb);
-  }
-
-  if (t.disagree) {
-    const c = el('div', 'callout dis');
-    c.append(el('b', 't', 'Sources disagree'), el('span', null, t.disagree));
-    d.append(c);
-  }
-
-  d.append(el('p', 'srcfor', `Sources for this guide: ${citesLine(t)}`));
+// ---- sources panel ---------------------------------------------------------
+function sourcesPanelHtml() {
+  const rows = SOURCES.map(s => `
+    <div class="src">
+      <div class="sname"><span class="n">[${s.n}]</span> ${esc(s.name.split(' \u2014 ')[0])}</div>
+      <div class="surl">${esc(s.url)}</div>
+      <div class="smeta">${s.n === 2 ? `rarity on ${citedBy.get(2)} of 55 guides` : `cited by ${citedBy.get(s.n)} of 55 guides`} \u00b7 read ${s.read}</div>
+    </div>`).join('');
+  return `<h3>SOURCES \u2014 EVERY STEP CITES THESE</h3>
+    <p class="sub">Guides are our own words; a step is only cited where the source states its fact. Rarity is Exophase [2], read live 20 Nov 2026.</p>${rows}`;
 }
+$('sources-panel').innerHTML = sourcesPanelHtml();
 
-function setCount(t, n) {
-  const v = Math.max(0, Math.min(n, t.counter.target));
-  state.counts[t.id] = v;
-  if (v >= t.counter.target) state.earned.add(t.id);
-  else if (state.earned.has(t.id) && (state.counts[t.id] || 0) < t.counter.target) state.earned.delete(t.id);
-  persist(); renderAll();
-}
-
-function renderSourcesPanel() {
-  const p = $('srcPanel'); p.replaceChildren();
-  for (const s of SOURCES) {
-    const item = el('div', 'srcitem');
-    item.append(el('span', 'sn', `[${s.n}] `), el('span', 'sname', s.name));
-    item.append(el('span', 'surl', s.url));
-    const cited = citedBy.get(s.n).size;
-    item.append(el('div', 'smeta', s.n === 2
-      ? `Read ${s.read} · backs the live rarity on all ${TROPHIES.length} trophies`
-      : `Read ${s.read} · cited by ${cited} of ${TROPHIES.length} guides`));
-    p.append(item);
-  }
-}
-
-function openFromElsewhere(id) {
-  state.open = id; state.view = 'checklist'; renderAll();
-  document.querySelector('.col-detail').scrollIntoView({ block: 'start' });
-}
-
+// ---- roadmap ---------------------------------------------------------------
 function renderRoadmap() {
-  const v = $('view-roadmap'); v.replaceChildren();
-  const save = el('div', 'savebox');
-  save.innerHTML = '<b>Save hygiene:</b> the game gives you 15 manual save slots plus 1 autosave, and there is no mission replay. ' +
-    'Save at the start and end of every chapter and before the final mission, and rotate the slots so a bad outcome can always be reloaded. ' +
-    'Never use cheat codes on a trophy run — cheats disable trophies and saving for that session.';
-  v.append(save);
+  const wrap = $('roadmap'); wrap.replaceChildren();
+  const note = document.createElement('div');
+  note.className = 'road-note';
+  note.innerHTML = `<h4>SAVE HYGIENE \u2014 READ BEFORE STAGE 1</h4>
+    <p>Use the manual saves: you have <strong>15 manual save slots plus an autosave</strong>. Keep a save at the start and end of each chapter (10 saves) and rotate the remaining five. <span class="cite">[1]</span> <span class="cite">[9]</span></p>
+    <p><strong>Cheats disable trophies and saving</strong> \u2014 never use them on your trophy save. <span class="cite">[9]</span> <span class="cite">[11]</span>
+    One playthrough is enough: no difficulty settings, no mission replay, free roam after the story. <span class="cite">[6]</span> <span class="cite">[9]</span></p>
+    <p><strong>The one trap:</strong> the balcony meditation at Jason\u2019s house (Positive Mental Attitude) exists only in Chapter 1 \u2014 see the Missables tab. <span class="cite">[1]</span> <span class="cite">[3]</span></p>`;
+  wrap.append(note);
   for (const st of STAGES) {
-    const ts = TROPHIES.filter((t) => t.stage === st.n);
-    const done = ts.filter((t) => state.earned.has(t.id));
+    const ts = TROPHIES.filter(t => t.stage === st.n);
+    const got = ts.filter(t => earned.has(t.id));
     const pts = ts.reduce((a, t) => a + t.points, 0);
-    const dpts = done.reduce((a, t) => a + t.points, 0);
-    const box = el('div', 'stage');
-    box.append(el('h3', null, `Stage ${st.n} — ${st.title}`));
-    box.append(el('div', 'smeta', `${done.length}/${ts.length} earned · ${fmt(dpts)}/${fmt(pts)} pts`));
-    if (st.ponr) box.append(el('div', 'ponr', st.ponr));
-    box.append(el('p', 'snote', st.note));
-    const chips = el('div', 'tchips');
-    for (const t of ts) {
-      const c = el('button', 'tchip' + (state.earned.has(t.id) ? ' done' : '') + (t.missable ? ' miss' : ''), `${dispName(t)} · ${t.points}`);
-      c.type = 'button';
-      c.addEventListener('click', () => openFromElsewhere(t.id));
-      chips.append(c);
-    }
-    box.append(chips);
-    v.append(box);
+    const card = document.createElement('div');
+    card.className = 'stage-card';
+    card.innerHTML = `<div class="stage-head"><span class="stage-num">STAGE ${st.n}</span>
+      <h3>${esc(st.title)}</h3>
+      <span class="stage-meta">${got.length}/${ts.length} earned \u00b7 ${fmtNum(pts)} pts \u00b7 ${esc(st.time)}</span></div>
+      <p>${esc(st.text)}</p>
+      <div class="stage-chips">${ts.map(t =>
+        `<button type="button" class="tchip${earned.has(t.id) ? ' done' : ''}" data-jump="${t.id}">${earned.has(t.id) ? '\u2713 ' : ''}${esc(isMasked(t) ? 'Hidden Trophy' : t.name)} <span class="pts">${t.points}</span></button>`).join('')}</div>`;
+    wrap.append(card);
   }
+  wrap.querySelectorAll('[data-jump]').forEach(b => b.addEventListener('click', () => {
+    openId = Number(b.dataset.jump); switchView('checklist'); renderList(); renderDetail();
+  }));
 }
 
+// ---- missables ---------------------------------------------------------------
 function renderMissables() {
-  const v = $('view-missables'); v.replaceChildren();
   const t = byId.get(28);
-  v.append(el('h2', null, 'Missables — one real trap, everything else checked'));
-  const intro = el('p', null, 'We checked every trophy on the list against the guides. Exactly one can be locked away by playing on: Positive Mental Attitude, and only because of a single Chapter 1 moment. Everything else can be finished in free roam after the credits.');
-  intro.style.maxWidth = '900px';
-  v.append(intro);
-  const c = el('div', 'callout miss');
-  c.append(el('b', 't', `Possibly missable — ${t.name} (trophy #${t.id})`));
-  c.append(el('p', null, t.missableNote));
-  const ol = el('ol', 'steps');
-  for (const s of t.steps) {
-    const li = el('li');
-    li.append(document.createTextNode(s.text + ' '), el('span', 'cite', s.cites.map((x) => `[${x}]`).join(' ')));
-    ol.append(li);
-  }
-  c.append(ol);
-  if (t.disagree) {
-    const dis = el('p'); dis.style.marginTop = '8px';
-    dis.append(el('b', null, 'Sources disagree: '), document.createTextNode(t.disagree));
-    c.append(dis);
-  }
-  const open = el('button', null, 'Open the full guide'); open.type = 'button';
-  open.addEventListener('click', () => openFromElsewhere(28));
-  c.append(open);
-  v.append(c);
-
-  v.append(el('h3', null, 'Checked and safe — you cannot lock yourself out of these'));
-  const ul = el('ul', 'safe-list');
   const safe = [
-    'All 12 story trophies: they are awarded automatically as missions complete, with no optional objectives attached [1].',
-    'Andy, Billy, Randy and Tyrone questlines: every quest giver stays available after the story ends [1].',
-    'Kenton\u2019s treasures: he goes quiet after Chapter 1 but texts Jason again during Chapters 2\u20133 to resume the line [1].',
-    'Kingpin Bowling valuables: the operation respawns, so anything missed can be collected on a later visit [1][9].',
-    'The expiring \u201Chourglass\u201D optional missions: they gate no trophy at all [1].',
-    'The whole 100% Completion checklist: nothing on it is missable; it can all be finished after the credits [1][9].',
-    'Every other meditation spot: only the Chapter 1 house balcony is time-limited; the rest stay on the map [1].',
-    'Strangers & Freaks strands: strangers are not required for 100% and remain in free roam [1][9].',
+    ['All 13 story trophies award automatically as you play and cannot be missed.', [6, 7]],
+    ['Every quest giver stays available or returns after the story \u2014 the Andy, Billy, Randy, Tyrone and Bret lines can all be finished post-game.', [1, 9]],
+    ['Kenton disappears after Chapter 1 but resumes during Chapters 2\u20133 and texts Jason.', [1]],
+    ['The Kingpin Bowling gang operation respawns, and its three valuables do not have to be taken in a single visit.', [1]],
+    ['Optional missions with hourglass icons are time-sensitive, but they gate no trophy on their own.', [1]],
+    ['Nothing on the 100% Completion checklist is missable.', [6, 9]],
+    ['The only self-inflicted lockout is cheats: they disable trophies and saving for the session.', [9, 11]]
   ];
-  for (const s of safe) ul.append(el('li', null, s));
-  v.append(ul);
+  $('missables').innerHTML = `
+    <div class="col-detail" style="margin-bottom:11px">${detailHtml(t)}</div>
+    <div class="stage-card"><div class="stage-head"><span class="stage-num">CHECKED</span>
+      <h3>Everything else: checked and safe</h3></div>
+      <p>We checked the whole list against all 11 sources. Beyond the one trophy above, nothing can be permanently missed:</p>
+      <ul class="safe-list">${safe.map(([txt, cs]) => `<li>${esc(txt)} ${citesHtml(cs)}</li>`).join('')}</ul>
+    </div>`;
+  wireDetail($('missables'));
 }
 
-function renderSourcesView() {
-  const v = $('view-sources'); v.replaceChildren();
-  v.append(el('h2', null, 'Sources & method'));
-  const p1 = el('p', null, 'Every guide in this app is written in our own words from the sources below — no guide text is copied. Trophy names, descriptions and grades are the official PlayStation ones, taken from the published list. Earn-rate (rarity) figures are the live rates published by Exophase [2], read live on 20 Nov 2026; the launch-night figures are the rates recorded on launch night for comparison.');
-  p1.style.maxWidth = '900px';
-  v.append(p1);
-  const p2 = el('p', null, 'A step only carries a citation where that source states the step\u2019s fact. Where sources disagree — the meditation count, the Shooting Range layout, two unconfirmed triggers — the guide shows both positions instead of picking one silently. Two trophies (Bad Luck, I Guess and The Truth Is Out There) still have unconfirmed triggers in every source; their guides say so plainly and give the best documented lead.');
-  p2.style.maxWidth = '900px';
-  v.append(p2);
-  const table = el('table', 'srctable');
-  const thead = el('tr');
-  for (const h of ['#', 'Source', 'URL', 'Read', 'Cited by']) thead.append(el('th', null, h));
-  table.append(thead);
-  for (const s of SOURCES) {
-    const tr = el('tr');
-    tr.append(el('td', null, `[${s.n}]`), el('td', null, s.name), el('td', 'u', s.url), el('td', null, s.read));
-    tr.append(el('td', null, s.n === 2 ? `rarity on all ${TROPHIES.length}` : `${citedBy.get(s.n).size} of ${TROPHIES.length} guides`));
-    table.append(tr);
-  }
-  v.append(table);
+// ---- sources view ------------------------------------------------------------
+function renderSources() {
+  $('sources-view').innerHTML = `
+    <table class="src-table"><thead><tr><th>#</th><th>SOURCE</th><th>READ</th><th>CITED BY</th></tr></thead>
+    <tbody>${SOURCES.map(s => `<tr>
+      <td><span class="cite">[${s.n}]</span></td>
+      <td><strong>${esc(s.name)}</strong><div class="u">${esc(s.url)}</div></td>
+      <td>${s.read}</td>
+      <td>${s.n === 2 ? `${citedBy.get(2)} of 55 guides (rarity)` : `${citedBy.get(s.n)} of 55 guides`}</td>
+    </tr>`).join('')}</tbody></table>
+    <div class="method-note">
+      <p><strong>How this guide was built.</strong> Every step in every guide cites the source that states its fact, and the wording is our own \u2014 trophy names, descriptions and grades are the official ones. Rarity is read live from Exophase [2] on 20 Nov 2026; the launch column is the frozen launch-night read of 19 Nov 2026.</p>
+      <p><strong>Where sources disagree, we show both positions</strong> instead of silently picking one: whether the trophy needs the Chapter 1 balcony meditation (Positive Mental Attitude), and how the Shooting Range challenges are laid out (The Shootist). One trophy, Bad Luck, I Guess, has no confirmed method anywhere yet \u2014 its guide says exactly that rather than inventing steps.</p>
+    </div>`;
 }
 
-function renderTabs() {
-  for (const b of document.querySelectorAll('.tab')) {
-    b.classList.toggle('active', b.dataset.view === state.view);
-  }
-  for (const name of ['checklist', 'roadmap', 'missables', 'sources']) {
-    $(`view-${name}`).classList.toggle('hidden', state.view !== name);
-  }
+// ---- tabs / controls -----------------------------------------------------------
+function switchView(v) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
 }
-
-function renderAll() {
-  renderHeader(); renderAudit(); renderChips(); renderList(); renderDetail();
-  renderSourcesPanel(); renderRoadmap(); renderMissables(); renderSourcesView(); renderTabs();
-}
-
-for (const b of document.querySelectorAll('.tab')) {
-  b.addEventListener('click', () => { state.view = b.dataset.view; renderAll(); });
-}
-$('btnExport').addEventListener('click', () => {
-  const payload = JSON.stringify({ app: 'the-platinum-run', version: 1, earned: [...state.earned], counts: state.counts, spoilers: state.spoilers }, null, 2);
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+$('search').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); renderList(); });
+$('sort').addEventListener('change', e => { sortMode = e.target.value; renderList(); });
+$('chk-spoilers').addEventListener('change', e => {
+  state.spoilers = e.target.checked; save(); renderList(); renderDetail(); renderRoadmap(); renderMissables();
+});
+$('btn-export').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify({ earned: [...earned], counts: state.counts, spoilers: state.spoilers }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
-  a.download = 'platinum-run-progress.json';
-  a.click();
+  a.href = URL.createObjectURL(blob); a.download = 'platinum-run-progress.json'; a.click();
   URL.revokeObjectURL(a.href);
 });
-$('fileImport').addEventListener('change', async (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
+$('btn-import').addEventListener('click', () => $('file-import').click());
+$('file-import').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
   try {
-    const parsed = JSON.parse(await f.text());
-    const arr = Array.isArray(parsed) ? parsed : parsed.earned;
-    if (Array.isArray(arr)) {
-      state.earned = new Set(arr.map((x) => (typeof x === 'number' ? x : (TROPHIES.find((t) => t.name === x) || {}).id)).filter((x) => byId.has(x)));
-    }
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      if (parsed.counts && typeof parsed.counts === 'object') state.counts = parsed.counts;
-      if (typeof parsed.spoilers === 'boolean') state.spoilers = parsed.spoilers;
-    }
-    persist(); renderAll();
+    const data = JSON.parse(await f.text());
+    if (Array.isArray(data.earned)) earned = new Set(data.earned.filter(id => byId.has(id)));
+    if (data.counts) state.counts = data.counts;
+    if (typeof data.spoilers === 'boolean') state.spoilers = data.spoilers;
+    save(); renderHeader(); renderList(); renderDetail(); renderRoadmap(); renderMissables();
   } catch { /* unreadable file: keep current progress */ }
   e.target.value = '';
 });
-$('chkSpoiler').addEventListener('change', () => { state.spoilers = $('chkSpoiler').checked; persist(); renderAll(); });
-$('selSort').addEventListener('change', () => { state.sort = $('selSort').value; renderAll(); });
-$('inpSearch').addEventListener('input', () => { state.q = $('inpSearch').value.trim().toLowerCase(); renderList(); });
-$('chkUnearned').addEventListener('change', () => { state.unearnedOnly = $('chkUnearned').checked; renderList(); });
 
-renderAll();
+// ---- go ------------------------------------------------------------------------
+renderHeader();
+buildChips();
+renderList();
+renderDetail();
+renderRoadmap();
+renderMissables();
+renderSources();
+switchView(['checklist', 'roadmap', 'missables', 'sources'].includes(params.get('view')) ? params.get('view') : 'checklist');

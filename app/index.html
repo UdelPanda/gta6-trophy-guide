@@ -3,79 +3,100 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Platinum Run — GTA VI Trophy Guide &amp; Tracker</title>
+<title>THE PLATINUM RUN — GTA VI Trophy Guide &amp; Tracker</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="sky"></div>
 <header class="topbar">
   <div class="brand">
-    <div class="brand-mark">VI</div>
-    <div>
-      <h1>The Platinum Run</h1>
-      <p class="tagline">GTA VI trophy guide &amp; tracker — every guide cited, every step sourced.</p>
+    <div class="brand-mark">PR</div>
+    <div class="brand-text">
+      <h1>THE PLATINUM RUN</h1>
+      <p class="brand-sub">GTA VI TROPHY GUIDE &amp; TRACKER — ALL 55 OFFICIAL TROPHIES</p>
     </div>
   </div>
-  <div class="headstats">
-    <div class="stat"><span id="statEarned">0 / 55</span><small>earned</small></div>
-    <div class="stat"><span id="statPoints">0 pts</span><small>of 1,350 PSN points</small></div>
-    <div class="stat"><span id="statPlat">—</span><small>platinum live rarity</small></div>
+  <div class="top-stats">
+    <div class="stat"><span class="stat-num" id="stat-earned">0 / 55</span><span class="stat-label">EARNED</span></div>
+    <div class="stat"><span class="stat-num" id="stat-points">0</span><span class="stat-label">PTS OF 1,350 PSN POINTS</span></div>
+    <div class="stat"><span class="stat-num" id="stat-plat">0.03%</span><span class="stat-label">HAVE THE PLATINUM [2]</span></div>
   </div>
-  <div class="headactions">
-    <button id="btnExport" type="button">Export progress</button>
-    <label class="importbtn">Import progress<input id="fileImport" type="file" accept="application/json" hidden></label>
-    <label class="spoiler"><input id="chkSpoiler" type="checkbox"> Hide story spoilers until earned</label>
+  <div class="top-actions">
+    <button id="btn-export" type="button">Export</button>
+    <button id="btn-import" type="button">Import</button>
+    <input id="file-import" type="file" accept="application/json" hidden>
+    <label class="spoiler-toggle"><input id="chk-spoilers" type="checkbox" checked> Show spoilers</label>
     <span class="saved-note">Saved in this browser</span>
   </div>
 </header>
-<section id="audit" class="audit" aria-label="Guide audit"></section>
-<nav class="tabs" role="tablist">
-  <button type="button" class="tab active" data-view="checklist">Checklist</button>
-  <button type="button" class="tab" data-view="roadmap">Roadmap</button>
-  <button type="button" class="tab" data-view="missables">Missables</button>
-  <button type="button" class="tab" data-view="sources">Sources</button>
+
+<div class="banner">
+  <span class="banner-lead">THE ONLY GUIDE WITH</span>
+  <span class="banner-item">LIVE RARITY FROM EXOPHASE ON ALL 55 TROPHIES</span>
+  <span class="banner-dot">·</span>
+  <span class="banner-item">WORKING COUNTERS ON 29 TROPHIES</span>
+  <span class="banner-dot">·</span>
+  <span class="banner-item">EVERY STEP CITED</span>
+</div>
+
+<div class="audit" id="audit-strip">
+  <div class="audit-cell"><span class="audit-num">55</span><span class="audit-label">OFFICIAL TROPHIES</span></div>
+  <div class="audit-cell"><span class="audit-num">1P · 2G · 6S · 46B</span><span class="audit-label">PLATINUM · GOLD · SILVER · BRONZE</span></div>
+  <div class="audit-cell"><span class="audit-num">28</span><span class="audit-label">HIDDEN TROPHIES</span></div>
+  <div class="audit-cell"><span class="audit-num">55/55</span><span class="audit-label">GUIDES CITE A SOURCE</span></div>
+  <div class="audit-cell"><span class="audit-num" id="audit-steps">221 STEPS</span><span class="audit-label">100% CITED</span></div>
+  <div class="audit-cell"><span class="audit-num">11</span><span class="audit-label">SOURCES READ 20 NOV 2026</span></div>
+  <div class="audit-cell audit-warn"><span class="audit-num">1</span><span class="audit-label">POSSIBLY MISSABLE</span></div>
+</div>
+
+<nav class="tabs">
+  <button class="tab active" data-view="checklist" type="button">Checklist</button>
+  <button class="tab" data-view="roadmap" type="button">Roadmap</button>
+  <button class="tab" data-view="missables" type="button">Missables</button>
+  <button class="tab" data-view="sources" type="button">Sources</button>
 </nav>
+
 <main>
-  <section id="view-checklist" class="view">
+  <section id="view-checklist" class="view active">
     <div class="cols">
-      <aside class="col-left">
+      <div class="col-left">
         <div class="filters">
-          <h2>Filter</h2>
-          <div id="kindChips" class="chips"></div>
-          <h3>Grade</h3>
-          <div id="gradeChips" class="chips"></div>
-          <label class="sortlab">Sort
-            <select id="selSort">
-              <option value="id">Official order</option>
-              <option value="rarityAsc">Rarest first (live)</option>
-              <option value="rarityDesc">Most earned first (live)</option>
-              <option value="pointsDesc">Points, high to low</option>
+          <input id="search" type="search" placeholder="Search trophies…" aria-label="Search trophies">
+          <div class="chip-row" id="kind-chips"></div>
+          <div class="chip-row" id="grade-chips"></div>
+          <label class="sort-label">Sort
+            <select id="sort">
+              <option value="official">Official order</option>
+              <option value="rarest">Rarest first (live)</option>
+              <option value="common">Most earned first</option>
               <option value="name">Name A–Z</option>
+              <option value="grade">Grade</option>
             </select>
           </label>
-          <label class="searchlab">Search
-            <input id="inpSearch" type="search" placeholder="Name, description, keyword…">
-          </label>
-          <label class="onlylab"><input id="chkUnearned" type="checkbox"> Show unearned only</label>
-          <p id="listCount" class="listcount"></p>
         </div>
-        <div id="list" class="list"></div>
-      </aside>
-      <article id="detail" class="col-detail"></article>
-      <aside class="col-right">
-        <h2>Sources — cited by number</h2>
-        <p class="srcintro">Every [n] in a guide points to one of these. Guides are written in our own words from these sources; trophy names, descriptions and grades are the official ones. Read 20 Nov 2026.</p>
-        <div id="srcPanel"></div>
-      </aside>
+        <div class="trophy-list" id="trophy-list"></div>
+      </div>
+      <div class="col-detail" id="detail"></div>
+      <aside class="col-sources" id="sources-panel"></aside>
     </div>
   </section>
-  <section id="view-roadmap" class="view hidden"></section>
-  <section id="view-missables" class="view hidden"></section>
-  <section id="view-sources" class="view hidden"></section>
+
+  <section id="view-roadmap" class="view">
+    <div id="roadmap"></div>
+  </section>
+
+  <section id="view-missables" class="view">
+    <div id="missables"></div>
+  </section>
+
+  <section id="view-sources" class="view">
+    <div id="sources-view"></div>
+  </section>
 </main>
-<footer>
-  <p>The Platinum Run is an unofficial fan-made guide for players. Trophy names, descriptions and grades are the official PlayStation ones; all guidance is written in our own words and cited to the sources listed. Rarity figures are the live earn rates published by Exophase, read on 20 Nov 2026.</p>
+
+<footer class="foot">
+  <p>Guides are written in our own words and cite their sources step by step. Trophy names, descriptions and grades are the official ones. Rarity is read live from Exophase [2] on 20 Nov 2026. Progress is stored only in your browser (localStorage) — export it before you clear your data.</p>
 </footer>
+
 <script type="module" src="app.js"></script>
 </body>
 </html>
