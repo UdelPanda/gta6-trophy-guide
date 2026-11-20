@@ -7,68 +7,75 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header id="site-header">
+<div class="sky"></div>
+<header class="topbar">
   <div class="brand">
-    <div class="brand-mark">PR</div>
+    <div class="brand-mark">VI</div>
     <div>
-      <h1>THE PLATINUM RUN</h1>
-      <p class="tagline">GTA VI Trophy Guide &amp; Tracker — all 55 PlayStation 5 trophies, with cited guides and live rarity</p>
+      <h1>The Platinum Run</h1>
+      <p class="tagline">GTA VI trophy guide &amp; tracker — every guide cited, every step sourced.</p>
     </div>
   </div>
-  <div class="header-stats">
-    <div class="stat"><span id="earned-count">0 / 55</span><label>earned</label></div>
-    <div class="stat"><span id="points-count">0 pts</span><label>of 1,350 PSN points</label></div>
-    <div class="stat"><span id="platinum-rarity">0.03%</span><label>hold the platinum, live</label></div>
+  <div class="headstats">
+    <div class="stat"><span id="statEarned">0 / 55</span><small>earned</small></div>
+    <div class="stat"><span id="statPoints">0 pts</span><small>of 1,350 PSN points</small></div>
+    <div class="stat"><span id="statPlat">—</span><small>platinum live rarity</small></div>
   </div>
-  <div class="header-actions">
-    <button id="export-btn" type="button">Export progress</button>
-    <label class="import-btn">Import progress<input id="import-input" type="file" accept="application/json"></label>
-    <label class="spoiler-toggle"><input id="spoiler-toggle" type="checkbox"> Hide story spoilers until earned</label>
-    <p class="saved-note" id="saved-note">Saved in this browser</p>
+  <div class="headactions">
+    <button id="btnExport" type="button">Export progress</button>
+    <label class="importbtn">Import progress<input id="fileImport" type="file" accept="application/json" hidden></label>
+    <label class="spoiler"><input id="chkSpoiler" type="checkbox"> Hide story spoilers until earned</label>
+    <span class="saved-note">Saved in this browser</span>
   </div>
 </header>
-
-<div id="audit-strip" aria-label="Guide audit"></div>
-
-<nav id="view-tabs">
-  <button type="button" data-view="checklist" class="tab active">Checklist</button>
-  <button type="button" data-view="roadmap" class="tab">Roadmap</button>
-  <button type="button" data-view="missables" class="tab">Missables</button>
-  <button type="button" data-view="sources" class="tab">Sources</button>
+<section id="audit" class="audit" aria-label="Guide audit"></section>
+<nav class="tabs" role="tablist">
+  <button type="button" class="tab active" data-view="checklist">Checklist</button>
+  <button type="button" class="tab" data-view="roadmap">Roadmap</button>
+  <button type="button" class="tab" data-view="missables">Missables</button>
+  <button type="button" class="tab" data-view="sources">Sources</button>
 </nav>
-
 <main>
   <section id="view-checklist" class="view">
-    <div class="checklist-grid">
-      <div class="list-column">
-        <div class="filter-bar">
-          <div id="kind-chips" class="chips"></div>
-          <div class="filter-row">
-            <div id="grade-chips" class="chips"></div>
-            <select id="sort-select" aria-label="Sort trophies">
-              <option value="official">Official order</option>
-              <option value="rarest">Rarest first</option>
+    <div class="cols">
+      <aside class="col-left">
+        <div class="filters">
+          <h2>Filter</h2>
+          <div id="kindChips" class="chips"></div>
+          <h3>Grade</h3>
+          <div id="gradeChips" class="chips"></div>
+          <label class="sortlab">Sort
+            <select id="selSort">
+              <option value="id">Official order</option>
+              <option value="rarityAsc">Rarest first (live)</option>
+              <option value="rarityDesc">Most earned first (live)</option>
+              <option value="pointsDesc">Points, high to low</option>
               <option value="name">Name A–Z</option>
             </select>
-          </div>
-          <input id="search-input" type="search" placeholder="Search trophies…" aria-label="Search trophies">
-          <p id="list-count" class="list-count"></p>
+          </label>
+          <label class="searchlab">Search
+            <input id="inpSearch" type="search" placeholder="Name, description, keyword…">
+          </label>
+          <label class="onlylab"><input id="chkUnearned" type="checkbox"> Show unearned only</label>
+          <p id="listCount" class="listcount"></p>
         </div>
-        <div id="trophy-list" class="trophy-list"></div>
-      </div>
-      <article id="detail-panel" class="detail-panel"></article>
-      <aside id="sources-panel" class="sources-panel"></aside>
+        <div id="list" class="list"></div>
+      </aside>
+      <article id="detail" class="col-detail"></article>
+      <aside class="col-right">
+        <h2>Sources — cited by number</h2>
+        <p class="srcintro">Every [n] in a guide points to one of these. Guides are written in our own words from these sources; trophy names, descriptions and grades are the official ones. Read 20 Nov 2026.</p>
+        <div id="srcPanel"></div>
+      </aside>
     </div>
   </section>
-  <section id="view-roadmap" class="view" hidden></section>
-  <section id="view-missables" class="view" hidden></section>
-  <section id="view-sources" class="view" hidden></section>
+  <section id="view-roadmap" class="view hidden"></section>
+  <section id="view-missables" class="view hidden"></section>
+  <section id="view-sources" class="view hidden"></section>
 </main>
-
 <footer>
-  <p>Every guide here is written for this app and cites its sources by number — see the Sources tab. Trophy names, descriptions and grades are the official PlayStation list. Live rarity: Exophase, read 20 Nov 2026. Works fully offline; your progress never leaves this browser unless you export it.</p>
+  <p>The Platinum Run is an unofficial fan-made guide for players. Trophy names, descriptions and grades are the official PlayStation ones; all guidance is written in our own words and cited to the sources listed. Rarity figures are the live earn rates published by Exophase, read on 20 Nov 2026.</p>
 </footer>
-
 <script type="module" src="app.js"></script>
 </body>
 </html>
