@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Platinum Run — GTA VI Trophy Guide &amp; Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="site-header">
+  <div class="brand">
+    <div class="brand-mark">PR</div>
+    <div>
+      <h1>THE PLATINUM RUN</h1>
+      <p class="tagline">GTA VI Trophy Guide &amp; Tracker — all 55 PlayStation 5 trophies, with cited guides and live rarity</p>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="stat"><span id="earned-count">0 / 55</span><label>earned</label></div>
+    <div class="stat"><span id="points-count">0 pts</span><label>of 1,350 PSN points</label></div>
+    <div class="stat"><span id="platinum-rarity">0.03%</span><label>hold the platinum, live</label></div>
+  </div>
+  <div class="header-actions">
+    <button id="export-btn" type="button">Export progress</button>
+    <label class="import-btn">Import progress<input id="import-input" type="file" accept="application/json"></label>
+    <label class="spoiler-toggle"><input id="spoiler-toggle" type="checkbox"> Hide story spoilers until earned</label>
+    <p class="saved-note" id="saved-note">Saved in this browser</p>
+  </div>
+</header>
+
+<div id="audit-strip" aria-label="Guide audit"></div>
+
+<nav id="view-tabs">
+  <button type="button" data-view="checklist" class="tab active">Checklist</button>
+  <button type="button" data-view="roadmap" class="tab">Roadmap</button>
+  <button type="button" data-view="missables" class="tab">Missables</button>
+  <button type="button" data-view="sources" class="tab">Sources</button>
+</nav>
+
+<main>
+  <section id="view-checklist" class="view">
+    <div class="checklist-grid">
+      <div class="list-column">
+        <div class="filter-bar">
+          <div id="kind-chips" class="chips"></div>
+          <div class="filter-row">
+            <div id="grade-chips" class="chips"></div>
+            <select id="sort-select" aria-label="Sort trophies">
+              <option value="official">Official order</option>
+              <option value="rarest">Rarest first</option>
+              <option value="name">Name A–Z</option>
+            </select>
+          </div>
+          <input id="search-input" type="search" placeholder="Search trophies…" aria-label="Search trophies">
+          <p id="list-count" class="list-count"></p>
+        </div>
+        <div id="trophy-list" class="trophy-list"></div>
+      </div>
+      <article id="detail-panel" class="detail-panel"></article>
+      <aside id="sources-panel" class="sources-panel"></aside>
+    </div>
+  </section>
+  <section id="view-roadmap" class="view" hidden></section>
+  <section id="view-missables" class="view" hidden></section>
+  <section id="view-sources" class="view" hidden></section>
+</main>
+
+<footer>
+  <p>Every guide here is written for this app and cites its sources by number — see the Sources tab. Trophy names, descriptions and grades are the official PlayStation list. Live rarity: Exophase, read 20 Nov 2026. Works fully offline; your progress never leaves this browser unless you export it.</p>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
